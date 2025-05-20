@@ -17,7 +17,11 @@ def extract_text_from_pdf(pdf_path,file_name):
     }
 
     doc.close()
-    return full_text,page_texts, metadata
+    return {
+        "full_text": full_text,
+        "page_texts": page_texts,
+        "metadata": metadata
+    }
 
 def chunk_pages_with_metadata(page_texts):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
