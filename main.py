@@ -1,9 +1,18 @@
+import sys
+import asyncio
+import subprocess
+
+if sys.platform.startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import streamlit as st
 import parser, embeddings,chain
 import tempfile
 from pathlib import Path
 import requests
 import re
+import browser_user
+
 
 st.set_page_config(page_title="Research Copilot", layout="centered")
 st.title("📄 Research Copilot: PDF Reader")
@@ -23,7 +32,27 @@ def download_pdf_from_url(url: str, output_path: Path):
     else:
         raise ValueError("Could not download PDF. Check the URL or site support.")
     
-method = st.radio("Choose input method", ["Upload PDF", "Enter URL"])#either upload pdf or enter url of paper
+def run_async_func(coro):
+    try:
+        return asyncio.run(coro)
+    except RuntimeError as e:
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(coro)
+
+def get_pdf_url_from_keyword(keyword):
+    result = subprocess.run(
+        [sys.executable, "browser_user.py", keyword],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        url = result.stdout.strip()
+        print("URL:", url) 
+        return url
+    else:
+        st.error(f"Error running browser_user.py: {result.stderr}")
+        return None
+
+method = st.radio("Choose input method", ["Upload PDF", "Enter URL","Download paper via keyword."])#either upload pdf or enter url of paper
 
 pdf_path = None
 
@@ -46,6 +75,30 @@ elif method == "Enter URL":
             except Exception as e:
                 st.error(f"Failed to download PDF: {e}")
 
+elif method == "Download paper via keyword.":
+    keyword = st.text_input("Enter a keyword to search for papers")
+    if "last_keyword" not in st.session_state:
+        st.session_state.last_keyword = ""
+    if "pdf_path" not in st.session_state:
+        st.session_state.pdf_path = None
+
+    if keyword and (keyword != st.session_state.last_keyword or st.session_state.pdf_path is None):
+        with st.spinner("Searching for papers..."):
+            url = get_pdf_url_from_keyword(keyword)
+            if url:
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                        download_pdf_from_url(url, Path(tmp.name))
+                        st.session_state.pdf_path = Path(tmp.name)
+                        st.session_state.last_keyword = keyword
+                    st.success("PDF downloaded successfully!")
+                except Exception as e:
+                    st.error(f"Failed to download PDF: {e}")
+            else:
+                st.error("No arXiv PDF link found.")
+
+    pdf_path = st.session_state.pdf_path
+
 if pdf_path:
     with st.spinner("Processing..."):
         parsed = parser.extract_text_from_pdf(pdf_path,pdf_path.name)
@@ -63,7 +116,7 @@ if pdf_path:
             question = st.text_input("Ask a question about the paper:")
             if question:
                 with st.spinner("Generating answer..."):
-                    result = qa_chain({"query": question})
+                    result = qa_chain.invoke({"query": question})
                     st.markdown("### Answer")
                     cleaned_result = re.sub(r"<think>.*?</think>", "", result["result"], flags=re.DOTALL).strip()
                     st.write(cleaned_result)
