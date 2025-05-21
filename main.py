@@ -52,7 +52,16 @@ def get_pdf_url_from_keyword(keyword):
         st.error(f"Error running browser_user.py: {result.stderr}")
         return None
 
-method = st.radio("Choose input method", ["Upload PDF", "Enter URL","Download paper via keyword."])#either upload pdf or enter url of paper
+method = st.radio("Choose input method", ["Upload PDF", "Enter URL","Download paper via keyword."], key="input_method")
+
+# Reset session state if the input method changes
+if "last_radio" not in st.session_state:
+    st.session_state.last_radio = method
+if method != st.session_state.last_radio:
+    for key in ["pdf_path", "last_keyword"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.session_state.last_radio = method
 
 pdf_path = None
 
