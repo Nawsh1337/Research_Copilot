@@ -12,8 +12,6 @@ def extract_text_from_pdf(pdf_path,file_name):
     metadata = {
         "file_name": file_name,
         "num_pages": len(doc),
-        "title": doc.metadata.get("title") or "Unknown",
-        "author": doc.metadata.get("author") or "Unknown",
     }
 
     doc.close()
